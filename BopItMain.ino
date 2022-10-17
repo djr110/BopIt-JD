@@ -37,6 +37,7 @@ const int bumpMaxAmplitude = 10000; //place holder value for max acceleration ch
 //LCD instance?
 LiquidCrystal lcd(LCDRS,LCDEnable,LCDD4,LCDD5,LCDD6,LCDD7);
 
+int j = 0;
 
 void setup() {
   //Setting up pins as input and output
@@ -91,13 +92,13 @@ void loop() {
       randomSeed(analogRead(SeedPin));
       long RandNumber = random(3); //Will spit out random number 0-2 which will determine actions
       executeCommand(RandNumber); //This command will tell the user what to do, and display a song, and the hold LED
-      delay(250);
+
       bool passFail = waitForUserAction(RandNumber,timeAllowed); 
       digitalWrite(LEDHold,LOW);
       if(passFail)
       {
         score = score+1;
-        if(score == 99)
+        if(score == 10) //change to 99 in final version
         {
           lcd.clear();
           lcd.setCursor(0,0);
@@ -107,6 +108,7 @@ void loop() {
 
           LEDCelebrate();
           ResetInitial = digitalRead(Start); //also changed this one
+          j = 0;
           break;
         }
         else
@@ -118,7 +120,7 @@ void loop() {
           lcd.setCursor(0,1);
           lcd.print(String("Score: " + String(score)));
           digitalWrite(LEDWin,HIGH);
-          delay(timeAllowed);
+          delay(timeAllowed/3);
           digitalWrite(LEDWin,LOW);
         }
       }
@@ -131,9 +133,11 @@ void loop() {
         lcd.setCursor(0,1);
         lcd.print(String("Score: " + String(score)));
         digitalWrite(LEDFail,HIGH);
+        youLoseTone();
         delay(3000);
         digitalWrite(LEDFail,LOW);
         ResetInitial = digitalRead(Start);  //was reset it
+        j = 0;
         break;
       }
       timeAllowed = timeAllowed-30;
@@ -142,9 +146,14 @@ void loop() {
   else
   {
     //Tell user to hit reset button to start game on LED
-    lcd.setCursor(0,0);
-    lcd.clear();
-    lcd.print("Press Start"); //20 characters
+    
+    if(j==0)
+    {
+      lcd.setCursor(0,0);
+      lcd.clear();
+      lcd.print("Press Start"); //20 characters
+      j = 1;
+    }
   }
 
 }
@@ -209,370 +218,110 @@ void executeCommand(long RandNumber) //PLAY AROUND WITH LENGTH OF TONES
 
 bool waitForUserAction(long randNumber, unsigned long timeAllowed)
 {
-  unsigned long StartTime = millis(); //get the time
-  
-  lcd.begin(16,2);
+  unsigned long startTime = millis();
+  unsigned long currentTime = startTime;
+
+  int resetState = digitalRead(ResetIt);
+  int lastResetState = resetState;
+
+  int pullState = digitalRead(PullIt);
+  int lastPullState = pullState;
+
+  int bumpState = digitalRead(BumpIt);
+  int lastBumpState = bumpState;
+  int i = 0;
   switch(randNumber)
   {
-    case 0:  //reset it
-      delay(50);
-      int lastSwitchState = digitalRead(ResetIt); //Records current and previous switch states
-      delay(50);
-      int currentSwitchState = lastSwitchState;
-      
-
-      //below is tests for pressing wrong button/bump
-
-      int lastPull0State = digitalRead(PullIt);
-      int currentPull0State = lastPull0State;
-
-      int lastBump0State = digitalRead(BumpIt);
-      int currentBump0State = lastBump0State;
-      //int xResult0 = 0;
-      //int yResult0 = 0;
-      //int zResult0 = 0;
-      
-      while(1) //inf loop
+    case 0:  //if reset it
+      while(i<2) //will iterate until i is incremented 2 times (two switches occur)
       {
-        currentSwitchState = digitalRead(ResetIt); //reads reset it
-        if(currentSwitchState != lastSwitchState)  //if the switch got moved, then...
+        resetState = digitalRead(ResetIt); //update states
+        pullState = digitalRead(PullIt);
+        bumpState = digitalRead(BumpIt);
+        currentTime = millis();
+        if(timeAllowed<(currentTime- startTime)) //fail if run out of time
         {
-          
-          break;
-        }
-        currentPull0State = digitalRead(PullIt);
-        if(lastPull0State != currentPull0State) //if accidently pull it exit fail
-        {
-          lcd.clear();  //debugging
-          lcd.setCursor(0,0);
-          lcd.print("F P during R"); //debugging
-          delay(2000); //debugging
           return 0;
         }
-        currentBump0State - digitalRead(BumpIt);
-        if(currentBump0State != lastBump0State)
+        if(resetState != lastResetState)
         {
-          lcd.clear();
-          lcd.setCursor(0,0);
-          lcd.print("F B during R");
-          delay(2000);
+          lastResetState = resetState; //update the previous state
+          i = i + 1; //iterate
+        }
+        if(pullState != lastPullState) //if pulled while seeking reset, fail
+        {
           return 0;
         }
-        //test if accidentily bump it
-        //xResult0 = analogRead(BumpItX);
-        //yResult0 = analogRead(BumpItY);
-        //zResult0 = analogRead(BumpItZ);
-        //int netResult0 = sqrt(pow(xResult0,2)+pow(yResult0,2)+pow(zResult0,2));
-        //if(netResult0>=bumpMaxAmplitude)
-        //{
-        //  lcd.clear();  //debugging
-        //  lcd.setCursor(0,0);
-          //lcd.print("F B during R"); //debugging
-
-          //delay(2000); //debugging
-        //  return 0;
-        //}
-        unsigned long CurrentTime = millis(); //if not flipped in time, record current time
-        unsigned long deltaTime = CurrentTime - StartTime; //find net time since start of task
-        if(deltaTime>timeAllowed) //if net time since start of task is greater than allowed time, break out of the loop without changing flag
+        if(bumpState != lastBumpState)//if bumped while seeking reset fail
         {
-          lcd.clear();  //debugging
-          lcd.setCursor(0,0);
-          lcd.print("F too slow"); //debugging
-          delay(2000); //debugging
-          return 0;
+          return 0; //
         }
       }
-
-      //now on to the flipping the switch again, most code will be copied.
-      
-
-      lastSwitchState = digitalRead(ResetIt);
-      currentSwitchState = lastSwitchState;
-
-      while(1)
-      {
-        currentSwitchState = digitalRead(ResetIt);
-        if(currentSwitchState != lastSwitchState)
-        {
-          return 1; //switch activated, return success
-        }
-        currentPull0State = digitalRead(PullIt);
-        if(lastPull0State != currentPull0State) //if accidently pull it exit fail
-        {
-          lcd.clear();  //debugging
-          lcd.setCursor(0,0);
-          lcd.print("F P during R"); //debugging
-          delay(2000); //debugging
-          return 0;
-        }
-        currentBump0State = digitalRead(BumpIt);
-        if(lastBump0State != currentBump0State)
-        {
-          lcd.clear();
-          lcd.setCursor(0,0);
-          lcd.print("F B during R");
-          delay(2000);
-          return 0;
-        }
-        //xResult0 = analogRead(BumpItX); //if accidentally bump it
-        //yResult0 = analogRead(BumpItY);
-        //zResult0 = analogRead(BumpItZ);
-        //int netResult0 = sqrt(pow(xResult0,2)+pow(yResult0,2)+pow(zResult0,2));
-        //if(netResult0>=bumpMaxAmplitude)
-       // {
-       //   lcd.clear();  //debugging
-         // lcd.setCursor(0,0);
-          //lcd.print("F B during R"); //debugging
-          //delay(2000); //debugging
-          //return 0;
-        //}
-        unsigned long CurrentTime = millis();
-        unsigned long deltaTime = CurrentTime - StartTime;
-        if(deltaTime>timeAllowed)
-        {
-          lcd.clear();  //debugging
-          lcd.setCursor(0,0);
-          lcd.print("F too long"); //debugging
-          delay(2000); //debugging
-          return 0; //too much time as elapsed return fail
-        }
-      }
-
+      return 1;
       break;
-    case 1:  //pull it
-
-      int lastPullState = digitalRead(PullIt); //Records current and previous switch states
-      int currentPullState = lastPullState;
-
-      //error if wrong action taken
-      int lastReset1State = digitalRead(ResetIt);
-      int currentReset1State = lastReset1State;
-
-      int lastBump1State = digitalRead(BumpIt);
-      int currentBump1State = lastBump1State;
-      
-      //int xResult1 = 0;
-      //int yResult1 = 0;
-      //int zResult1 = 0;
-      
-      while(1) //inf loop
+    case 1:  //if pull it
+      while(i<2) //iterate until 2 switches happen
       {
-        currentPullState = digitalRead(PullIt); //reads Pull it
-        if(currentPullState != lastPullState)  //if the switch got moved, then...
+        resetState = digitalRead(ResetIt); //update States
+        pullState = digitalRead(PullIt);
+        bumpState = digitalRead(BumpIt);
+        currentTime = millis();
+        if(timeAllowed<(currentTime- startTime)) //fail if run out of time
         {
-           // completion of first half of task
-           
-          break;
-        }
-        currentReset1State = digitalRead(ResetIt);
-        if(lastReset1State != currentReset1State) //if accidently reset it exit fail
-        {
-          lcd.clear();  //debugging
-          lcd.setCursor(0,0);
-          lcd.print("F R during P"); //debugging
-          delay(2000); //debugging
           return 0;
         }
-        currentBump1State = digitalRead(BumpIt);
-        if(lastBump1State != currentBump1State)
+        if(resetState != lastResetState) //if reset while seeking pull, fail
         {
-          lcd.clear();
-          lcd.setCursor(0,0);
-          lcd.print("F B during P");
-          delay(2000);
           return 0;
         }
-        //xResult1 = analogRead(BumpItX);
-        //yResult1 = analogRead(BumpItY);
-        //zResult1 = analogRead(BumpItZ);
-        //int netResult1 = sqrt(pow(xResult1,2)+pow(yResult1,2)+pow(zResult1,2));
-       // if(netResult1>=bumpMaxAmplitude)  //if accidentaly bump
-        //{
-         // lcd.clear();  //debugging
-         // lcd.setCursor(0,0);
-         // lcd.print("F B during P"); //debugging
-         // delay(2000); //debugging
-         // return 0;
-       // }
-        unsigned long CurrentTime = millis(); //if not flipped in time, record current time
-        unsigned long deltaTime = CurrentTime - StartTime; //find net time since start of task
-        if(deltaTime>timeAllowed) //if net time since start of task is greater than allowed time, break out of the loop without changing flag
+        if(pullState != lastPullState) //if pulled correctly
         {
-          lcd.clear();  //debugging
-          lcd.print("too long "); //debugging
-          delay(2000); //debugging
-          return 0;
+          lastPullState = pullState; //updated previous state
+          i = i + 1; //increment
+        }
+        if(bumpState != lastBumpState)//if bumped while seeking pull fail
+        {
+          return 0; //
         }
       }
-
-      //now on to the flipping the switch again, most code will be copied.
-      
-
-      lastPullState = digitalRead(PullIt);
-      currentPullState = digitalRead(PullIt);
-
-      while(1)
+      return 1;
+      break;
+    default: //if bump it
+      while(i<2) //iterate until 2 switches happen
       {
-        currentPullState = digitalRead(PullIt);
-        if(currentPullState != lastPullState)
+        resetState = digitalRead(ResetIt); //update States
+        pullState = digitalRead(PullIt);
+        bumpState = digitalRead(BumpIt);
+        currentTime = millis();
+        if(timeAllowed<(currentTime- startTime)) //fail if run out of time
         {
-          return 1; //switch activated, return success
-        }
-        currentReset1State = digitalRead(ResetIt);
-        if(lastReset1State != currentReset1State) //if accidently reset it exit fail
-        {
-          lcd.clear();  //debugging
-          lcd.setCursor(0,0);
-          lcd.print("F R during P"); //debugging
-          delay(2000); //debugging
           return 0;
         }
-        currentBump1State = digitalRead(BumpIt);
-        if(lastBump1State != currentBump1State)
+        if(resetState != lastResetState)
         {
-          lcd.clear();
-          lcd.setCursor(0,0);
-          lcd.print("F B during P");
-          delay(2000);
+          return 0; //reset while seeking bump
+        }
+        if(pullState != lastPullState) //if pulled while seeking bump, fail
+        {
           return 0;
         }
-        //xResult1 = analogRead(BumpItX);
-        //yResult1 = analogRead(BumpItY);
-        //zResult1 = analogRead(BumpItZ);
-        //int netResult1 = sqrt(pow(xResult1,2)+pow(yResult1,2)+pow(zResult1,2));
-       // if(netResult1>=bumpMaxAmplitude)  //if accidentaly bump
-        //{
-         // lcd.clear();  //debugging
-          //lcd.setCursor(0,0);
-          //lcd.print("F B during P"); //debugging
-         // delay(2000); //debugging
-        //  return 0;
-       // }
-        unsigned long CurrentTime = millis();
-        unsigned long deltaTime = CurrentTime - StartTime;
-        if(deltaTime>timeAllowed)
+        if(bumpState != lastBumpState)//if bumped 
         {
-          lcd.clear();  //debugging
-          lcd.setCursor(0,0);
-          lcd.print("too long"); //debugging
-          delay(2000); //debugging
-          return 0; //too much time as elapsed return fail
+          lastBumpState = bumpState; //
+          i = i + 1;
         }
       }
-
+      return 1;
       break;
 
-    default:  //bump it
-      //int xResult = 0;
-      //int yResult = 0;
-      //int zResult = 0;
-      int currentBumpState = digitalRead(BumpIt);
-      int lastBumpState = currentBumpState;
-      
-      int lastReset2State = digitalRead(ResetIt); //Records current and previous reset states
-      int currentReset2State = digitalRead(ResetIt);
-
-      int lastPull2State = digitalRead(PullIt); //Records current and previous pull states
-      int currentPull2State = digitalRead(PullIt);
-
-      while(1)
-      {
-        //xResult = analogRead(BumpItX);
-        //yResult = analogRead(BumpItY);
-        //zResult = analogRead(BumpItZ);
-
-
-        //below is testing for if pull or reset it is triggered
-        currentPull2State = digitalRead(PullIt);
-        currentReset2State = digitalRead(ResetIt);
-
-        if(currentPull2State != lastPull2State)  //if triggered then did wrong action and exit fail
-        {
-          lcd.clear();  //debugging
-          lcd.print("F P during B"); //debugging
-          delay(2000); //debugging
-          return 0;
-        }
-        if(lastReset2State != currentReset2State)
-        {
-          lcd.clear();  //debugging
-          lcd.print("F R during B"); //debugging
-          delay(2000); //debugging
-          return 0;
-        }
-
-
-        //int netResult = sqrt(pow(xResult,2)+pow(yResult,2)+pow(zResult,2)); //net analog data
-        //if(netResult>= bumpMaxAmplitude)
-        //{
-        //  return 1;
-        //}
-        currentBumpState = digitalRead(BumpIt);
-        if(lastBumpState!=currentBumpState)
-        {
-          break;
-        }
-        unsigned long CurrentTime = millis();
-        unsigned long deltaTime = CurrentTime - StartTime;
-        if(deltaTime>timeAllowed)
-        {
-          lcd.clear();  //debugging
-          lcd.setCursor(0,0);
-          lcd.print("too long"); //debugging
-          delay(2000); //debugging
-          return 0;
-        }
-      }
-
-      lastBumpState = digitalRead(BumpIt);
-      currentBumpState = lastBumpState;
-      while(1)
-      {
-        currentBumpState = digitalRead(BumpIt);
-        if(currentBumpState!=lastBumpState)
-        {
-          return 1;
-        }
-        currentPull2State = digitalRead(PullIt);
-        currentReset2State = digitalRead(ResetIt);
-        if(currentPull2State != lastPull2State)
-        {
-          lcd.clear();
-          lcd.setCursor(0,0);
-          lcd.print("F P during B");
-          delay(2000);
-          return 0;
-
-        }
-        if(currentReset2State != lastReset2State)
-        {
-          lcd.clear();
-          lcd.setCursor(0,0);
-          lcd.print("F R during B");
-          delay(2000);
-          return 0;
-        }
-        unsigned long CurrentTime = millis();
-        unsigned long deltaTime = CurrentTime - StartTime;
-        if(deltaTime>timeAllowed)
-        {
-          lcd.clear();  //debugging
-          lcd.setCursor(0,0);
-          lcd.print("too long"); //debugging
-          delay(2000); //debugging
-          return 0;
-        }
-
-      }
-
-    break;
   }
+  return 0;
 }
 
 
 void LEDCelebrate() //for winning game
 {
+  youWinTone();
   digitalWrite(LEDWin,HIGH);
   digitalWrite(LEDHold,LOW);
   digitalWrite(LEDFail,LOW);
@@ -632,4 +381,143 @@ void LEDCelebrate() //for winning game
   digitalWrite(LEDHold,LOW);
   digitalWrite(LEDFail,HIGH);
   delay(500);
+
+  digitalWrite(LEDFail,LOW);
+  delay(500);
+}
+
+void youLoseTone()
+{
+  tone(Speaker,523); //C5
+  delay(100);
+  noTone(Speaker);
+
+  tone(Speaker,622);  //Eb5
+  delay(100);
+  noTone(Speaker);
+
+  tone(Speaker,784); //G5
+  delay(100);
+  noTone(Speaker);
+
+  tone(Speaker,740); //F#5
+  delay(100);
+  noTone(Speaker);
+
+  tone(Speaker,587); //D5
+  delay(100);
+  noTone(Speaker);
+
+  tone(Speaker,494); //B4
+  delay(100);
+  noTone(Speaker);
+
+  tone(Speaker,466); //Bb4
+  delay(200);
+  noTone(Speaker);
+
+  tone(Speaker,554); //Db5
+  delay(200);
+  noTone(Speaker);
+
+  tone(Speaker,698); //F5
+  delay(200);
+  noTone(Speaker);
+
+  tone(Speaker,932); //Bb5
+  delay(400);
+  noTone(Speaker);
+}
+
+void youWinTone()
+{
+  tone(Speaker,523); //C5
+  delay(100);
+  noTone(Speaker);
+
+  tone(Speaker, 587); //D5
+  delay(100);
+  noTone(Speaker);
+
+  tone(Speaker,659);  //E5
+  delay(100);
+  noTone(Speaker);
+
+  tone(Speaker,784); //G5
+  delay(100);
+  noTone(Speaker);
+
+  tone(Speaker,659);  //E5
+  delay(100);
+  noTone(Speaker);
+
+  tone(Speaker,587); //D5
+  delay(100);
+  noTone(Speaker);
+
+  tone(Speaker,523); //C5
+  delay(100);
+  noTone(Speaker);
+
+  tone(Speaker,523); //C5
+  delay(100);
+  noTone(Speaker);
+
+  tone(Speaker,587); //D5
+  delay(100);
+  noTone(Speaker);
+
+  tone(Speaker,659);  //E5
+  delay(100);
+  noTone(Speaker);
+
+  tone(Speaker,784); //G5
+  delay(100);
+  noTone(Speaker);
+
+  tone(Speaker,659);  //E5
+  delay(100);
+  noTone(Speaker);
+
+  tone(Speaker,587); //D5
+  delay(100);
+  noTone(Speaker);
+
+  tone(Speaker,523); //C5
+  delay(100);
+  noTone(Speaker);
+
+  tone(Speaker,523); //C5
+  delay(100);
+  noTone(Speaker);
+
+  tone(Speaker,587); //D5
+  delay(100);
+  noTone(Speaker);
+
+  tone(Speaker,659);  //E5
+  delay(100);
+  noTone(Speaker);
+
+  tone(Speaker,784); //G5
+  delay(200);
+  noTone(Speaker);
+
+  tone(Speaker,698);  //F5
+  delay(200);
+  noTone(Speaker);
+
+  tone(Speaker,659); //E5
+  delay(200);
+  noTone(Speaker);
+
+  tone(Speaker,1026); //C6
+  delay(500);
+  noTone(Speaker);
+
+  
+
+
+
+  
 }
