@@ -84,7 +84,7 @@ void loop() {
     //run game
     
     int score = 0;
-    unsigned long timeAllowed = 8000;
+    unsigned long timeAllowed = 5000;
     bool winLose = 0;
     while(score<99)
     {
